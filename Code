@@ -1,0 +1,2173 @@
+#!/usr/bin/env python
+# coding: utf-8
+
+# # Telecom Churn - Group Case Study
+
+# * __Problem Statement__
+# A US-based housing company named Surprise Housing has decided to enter the Australian market. The company uses data analytics to purchase houses at a price below their actual values and flip them on at a higher price. For the same purpose, the company has collected a data set from the sale of houses in Australia. The data is provided in the CSV file below.
+#  
+# The company is looking at prospective properties to buy to enter the market. You are required to build a regression model using regularisation in order to predict the actual value of the prospective properties and decide whether to invest in them or not.
+# 
+# The company wants to know:
+# •	Which variables are significant in predicting the price of a house, and
+# •	How well those variables describe the price of a house.
+#  
+# Also, determine the optimal value of lambda for ridge and lasso regression.
+# 
+# * __Business Goal__ 
+#  
+# You are required to model the price of houses with the available independent variables. This model will then be used by the management to understand how exactly the prices vary with the variables. They can accordingly manipulate the strategy of the firm and concentrate on areas that will yield high returns. Further, the model will be a good way for management to understand the pricing dynamics of a new market.
+
+# # Approach of my analysis to the problem
+
+# __High Level Approach__
+# As there are different approaches in Advanced Linear Regression, I would create 2 models with Ridge and Lasso. 
+# 
+# * The basis for 3 models is as follows:
+# 
+#   1. __Multiple Linear Regression Model I:__ 
+#      * Scaling - Standard Scaler
+#      * ML Algorithm - Ridge Regression
+# 
+#   2. __Multiple Linear Regression Model II:__ 
+#      * Scaling - Standard Scaler
+#      * ML Algorithm - Lasso Regression
+#   
+# __Based on the inferences from each of the model, I would try to select the best model based on the significance level and other factors__
+# 
+
+# # Steps invoved in this notebook
+
+# 1. Import Python Libraries for data analysis and ML 
+# 2. Local user defined functions
+# 3. Sourcing the Data
+# 4. Inspect and Clean the Data
+# 5. Visualising and Exploring the data
+# 6. Preparing the data for modelling(train-test split, rescaling etc)
+# 7. Model evaluation for Advanced Regression Criteria
+# 8. Advanced Linear Regression Model I using Ridge Regression
+#    * Modelling, Training, Calculate Coefficents and Iteration, Residual Analysis on both test and train, Evaluate the model with Test set and summary
+# 9. Advanced Linear Regression Model II using Lasso Regression
+#    * Modelling, Training, Calculate Coefficents, Selection of Features and Iteration, Residual Analysis on both test and train, Evaluate the model with Test set and summary
+# 10. Evaluation of the 2 Models
+# 11. Final Summary
+# 12. Part II of the Assignment for Subjective Questions
+
+# # Import Python Functions
+
+# In[1]:
+
+
+# Local classes and Local flags
+
+# Local Classes
+class color:
+   PURPLE = '\033[95m'
+   CYAN = '\033[96m'
+   DARKCYAN = '\033[36m'
+   BLUE = '\033[94m'
+   GREEN = '\033[92m'
+   YELLOW = '\033[93m'
+   RED = '\033[91m'
+   BOLD = '\033[1m'
+   UNDERLINE = '\033[4m'
+   END = '\033[0m'
+    
+# Debug flag for investigative purpose
+DEBUG = 0
+
+# Default random_state
+rndm_stat = 42
+
+
+# In[2]:
+
+
+# Python libraries for Data processing and analysis
+import time as time
+strt = time.time()
+import pandas as pd
+pd.set_option('display.max_columns', 200)
+pd.set_option('display.max_rows', 100)
+pd.options.mode.use_inf_as_na = True
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+import datetime
+import glob
+from matplotlib.pyplot import figure
+import warnings
+import math
+import itertools
+warnings.filterwarnings('ignore')
+sns.set_style("whitegrid")
+from math import sqrt
+import re
+from prettytable import PrettyTable
+from datetime import datetime
+
+# ML Libraries
+import statsmodels
+import statsmodels.api as sm
+import sklearn as sk
+from sklearn.model_selection import train_test_split,GridSearchCV, KFold
+from sklearn.metrics import r2_score,mean_squared_error,mean_absolute_error, confusion_matrix
+from sklearn.linear_model import LinearRegression, Ridge, Lasso, LogisticRegression
+from sklearn.preprocessing import MinMaxScaler, OneHotEncoder, StandardScaler,OrdinalEncoder,LabelEncoder,Normalizer,RobustScaler,PowerTransformer
+from sklearn.compose import ColumnTransformer
+from statsmodels.stats.outliers_influence import variance_inflation_factor
+
+from sklearn import metrics
+
+# ML Feature Engineering
+from sklearn.decomposition import PCA
+from sklearn.decomposition import IncrementalPCA as IPCA
+
+
+# # Local User Defined Functions
+
+# ## Local functions for data overview and data cleaning
+
+# In[3]:
+
+
+# local functions
+
+# Function to read a file & Store it in Pandas
+# read_file takes either csv or excel file as input and reuturns a pandas DF and
+# also prints head, tail, description, info and shape of the DF
+def read_file(l_fname,l_path,head=0):
+    i = l_fname.split(".")
+    f_path = l_path+'/'+l_fname
+    print(f_path,i[0],i[1])
+    if (i[1] == "xlsx"):
+        l_df = pd.read_excel(f_path,header=head,encoding = "ISO-8859-1",infer_datetime_format=True)
+    elif (i[1] == "csv"):
+        l_df = pd.read_csv(f_path,header=head,encoding = "ISO-8859-1",infer_datetime_format=True)
+    ov_df(l_df)
+    return(l_df)
+
+# Function to get the Overview of DataFrame
+# take df as input and prints head, tail, description, info and shape of the DF
+def ov_df(l_df):
+    print(color.BOLD+color.PURPLE + 'Inspect and Explore the Dataset' + color.END)
+    print("\n#####################  DataFrame Head  ######################")
+    print(l_df.head(3))
+    print("\n#####################  DataFrame Tail  ######################")
+    print(l_df.tail(3))
+    print("\n#####################  DataFrame Info  ######################")
+    print(l_df.info())
+    print("\n####################  DataFrame Columns  ####################")
+    print(list(l_df.columns))
+    print("\n####################  DataFrame Shape  ####################")
+    print("No of Rows",l_df.shape[0])
+    print("No of Columns",l_df.shape[1])
+
+# Function per_col_null takes a df as input and prints summary of Null Values across Columns
+def per_col_null(l_df):
+    print("\n############  Missing Values of Columns in %  ############")
+    col_null = round((l_df.isnull().sum().sort_values(ascending=False)/len(l_df))*100,4)
+    print(col_null[col_null > 0])  
+
+# Function to change the cast the column into different type
+def col_cast(l_df,n_dtyp,*args):
+    for l_c_name in args:
+        l_df = l_df.astype({l_c_name:n_dtyp})
+        print(l_df[l_c_name].describe())
+    return(l_df)
+
+
+# ## Functions to plot
+
+# In[4]:
+
+
+# Function to plot 2 or more box plots
+# m_box_plt takes a df, dimensions of subplot (no of rows and columns) and variable list of columns
+# to plot multiple boxplots
+def m_box_plt(l_df,n_r,n_c,*args):
+    j=1
+    fig_h = n_r * 4
+    plt.figure(1,figsize=(13,fig_h))
+    # set palette 
+    palette = itertools.cycle(sns.color_palette())
+    sns.set(style="whitegrid",font_scale=1,palette='RdYlGn')
+    for i in args:
+        plt.subplot(n_r,n_c,j)
+        sns.boxplot(l_df[i],orient="v")
+        #sns.swarmplot(l_df[i],color=".25",orient="v")
+        plt.title('Central Tendency of {}'.format(i),fontsize=12)
+        j+=1
+    plt.show()
+    
+# Function to plot 2 or more Linear Regression plots
+# reg_plt takes a df, dimensions of subplot (no of rows and columns), dependent variable and variable list of columns
+# to plot multiple reg plots
+def reg_plt(l_df,n_r,n_c,l_dep,*args):
+    j=1
+    plt.figure(1,figsize=(13,13))
+    sns.set(style="whitegrid",font_scale=1,palette='Set1')
+    for i in args:
+        plt.subplot(n_r,n_c,j)
+        ax = sns.regplot(x=i,y=l_dep,data=l_df,x_jitter=.1)
+        plt.title('Linear Regression Plot of {} and {}'.format(i,l_dep),fontsize=12)
+        plt.legend(loc=1)
+        j+=1
+    plt.show()
+
+#  Function to plot 2 or more box plots
+# comp_box_plt takes a df, dimensions of subplot (no of rows and columns), dependent variable and variable list of columns
+# to plot multiple comparitive box plots
+def comp_box_plt(l_df,n_r,n_c,l_dep,*args):
+    j=1
+    fig_h = n_r * 4
+    plt.figure(1,figsize=(13,fig_h))
+    # set palette 
+    palette = itertools.cycle(sns.color_palette())
+    sns.set(style="whitegrid",font_scale=1,palette='RdYlGn')
+    for i in args:
+        plt.subplot(n_r,n_c,j)
+        sns.boxplot(l_df[i],orient="v")
+        #sns.swarmplot(l_df[i],color=".25",orient="v")
+        plt.title('Central Tendency of {}'.format(i),fontsize=12)
+        j+=1
+    plt.show()
+    
+    
+#  Function to plot 2 or more box plots
+# dist_plt takes a df, dimensions of subplot (no of rows and columns), variable list of columns
+# to plot multiple comparitive distribution plots
+def dist_plt(l_df,n_r,n_c,*args):
+    j=1
+    colrs = ["dummy","skyblue","red","olive","gold","teal","green","blue"]
+    fig_h = n_r * 5
+    plt.figure(1,figsize=(8,fig_h))
+    sns.set(style="whitegrid",font_scale=0.8)
+    for i in args:
+        plt.subplot(n_r,n_c,j)
+        ax = sns.distplot(l_df[i],bins=20,color=colrs[j])
+        plt.title('Distribution of {}'.format(i),fontsize=10)
+        j+=1
+    plt.show()
+
+# Function to plot 2 or more Seaborn count plots. 
+# This function takes dataframe and variable no of arguments which are columns and do subplots based on the no of rows 
+# and columns given
+def cnt_plt(l_df,n_r,n_c,*args):
+    j=1
+    fig_h = n_r * 7
+    plt.figure(1,figsize=(14,fig_h))
+    sns.set(font_scale=1,palette='bright')
+    rot = 25
+    if n_c == 1:
+        rot = 90
+    for i in args:
+        plt.subplot(n_r,n_c,j)
+        ax = sns.countplot(l_df[i])
+        plt.setp(ax.xaxis.get_majorticklabels(), rotation=rot)
+        total = len(l_df[i])
+        plt.title('Univariate Analysis of variable {}'.format(i),fontsize=12)
+        for p in ax.patches:
+            percentage = '{:.1f}%'.format(100 * p.get_height()/total)
+            x = p.get_x() + 0.3
+            y = p.get_y() + p.get_height()
+            ax.annotate(percentage, (x, y))
+        j+=1
+    plt.show()
+
+
+# # Sourcing the Data
+
+# ## Read the train.csv
+
+# In[5]:
+
+
+# Set the path and file name
+folder=r"C:\Users\703199519\WIP\Upgrad\CaseStudy"
+file="telecom_churn_data.csv"
+
+# Read file using local functions. read_file takes either csv or excel file as input and reuturns a pandas DF and
+# also prints head, tail, description, info and shape of the DF
+t_df = read_file(file,folder)
+
+
+# ## Inspect the Column Data Types of c_df
+
+# In[6]:
+
+
+# Analyze Categorical, Numerical and Date variables of Application Data
+print(color.BOLD+"Categorical and Numerical Variables"+ color.END)
+display(t_df.dtypes.value_counts())
+print(color.BOLD+"Numerical Integer Variables"+ color.END)
+display(t_df.select_dtypes(include='int64').dtypes)
+print(color.BOLD+"Categorical Variables"+ color.END)
+display(t_df.select_dtypes(include=object).dtypes)
+print(color.BOLD+"Numerical Float Variables"+ color.END)
+display(t_df.select_dtypes(include='float64').dtypes)
+
+
+# In[7]:
+
+
+# Create a list of numerical and categorical variables for future analysis
+t_num_li = list(t_df.select_dtypes(include=np.number).columns)
+t_cat_li = list(t_df.select_dtypes(exclude=np.number).columns)
+print(color.BOLD+"\nNumerical Columns -"+color.END,t_num_li)
+print(color.BOLD+"\nCategorical Columns -"+color.END,t_cat_li)
+
+
+# In[8]:
+
+
+# Inspect the Categorical columns
+t_df[t_cat_li].head()
+
+
+# ## Analyze Numerical Columns of the t_df
+
+# In[9]:
+
+
+# Inspect the Numerical columns
+t_df[t_num_li].head()
+
+
+# ## Analyze Categorical Columns of the t_df
+
+# In[10]:
+
+
+# Inspect the Numerical columns
+t_df[t_cat_li].head()
+
+
+# # Business Requirements - Derived Metrics
+
+# ## Derived Metrics based on Business Requirements
+
+# Define high-value customers as follows: Those who have recharged with an amount more than or equal to X, where X is the 70th percentile of the average recharge amount in the first two months (the good phase).
+
+# Given data columns for voice and data separately. Hence we have to find the combined recharge amount for data and voice services.
+# 
+# * Average Voice Recharge during Good Phase = __average of "total_rech_amt_6"+"total_rech_amt_7"__
+# * Average Data Recharge during Good Phase = __average of "av_rech_amt_data_6" * "total_rech_data_6" + "av_rech_amt_data_7" * "total_rech_data_7"__
+# 
+# * __Average Recharge amount = Average Voice Recharge during Good Phase + Average Data Recharge during Good Phase__
+#  
+# 
+
+# ### Inspect the Null Values in t_df 
+
+# In[11]:
+
+
+# Null values in the Application DF. 
+# per_col_null is local function which returns the % of null columns which are non zero
+per_col_null(t_df)
+
+
+# ### Inspect the Null Values in t_df wrt columns that are used for calculation of High Valued Customers
+
+# In[12]:
+
+
+# Null values in the Application DF. 
+# per_col_null is local function which returns the % of null columns which are non zero
+t_df[["total_rech_amt_6","total_rech_amt_7","av_rech_amt_data_6","total_rech_data_6","av_rech_amt_data_7","total_rech_data_7"]].isnull().sum()
+
+
+# __Observations__
+# * There are null values across the columns "av_rech_amt_data_6","total_rech_data_6","av_rech_amt_data_7","total_rech_data_7".
+# * We might need to impute them to derive the high valued customers
+
+# ## Segregate the Columns into Data and Non Data Columns
+
+# In[13]:
+
+
+# all the features
+all_c_lis = list(t_df.columns)
+len(all_c_lis)
+
+# derive list of features related to churn phase
+pattern = (r'3g|2g|vbc|fb|data')
+data_li = list(filter(lambda x : re.search(pattern,x) ,all_c_lis))
+print(data_li,len(data_li))
+
+
+# In[14]:
+
+
+# Devide the columns wrt month of the year
+jun_data_li = list(filter(lambda x : re.search(r'_6|jun',x),data_li))
+jul_data_li = list(filter(lambda x : re.search(r'_7|jul',x),data_li))
+aug_data_li = list(filter(lambda x : re.search(r'_8|aug',x),data_li))
+sep_data_li = list(filter(lambda x : re.search(r'_9|sep',x),data_li))
+
+# Inspect the lists
+print(jun_data_li)
+print(jul_data_li)
+print(aug_data_li)
+print(sep_data_li)
+
+
+# ### Explore the Data columns for June having Null values
+
+# In[15]:
+
+
+# explore null values across June data services
+t_df[jun_data_li].isnull().sum()
+
+
+# __Observations__
+#   * 'date_of_last_rech_data_6', 'total_rech_data_6', 'max_rech_data_6', 'count_rech_2g_6', 'count_rech_3g_6', 'av_rech_amt_data_6',  'arpu_3g_6', 'arpu_2g_6', 'fb_user_6' have equal no of null values
+#   * 'vol_2g_mb_6',  'vol_3g_mb_6','monthly_2g_6', 'sachet_2g_6',
+#  'monthly_3g_6', 'sachet_3g_6' and jun_vbc_3g do not have null values                     
+
+# In[16]:
+
+
+# Explore the columns and unique values 
+{col:len(t_df[t_df[jun_data_li].isnull().sum(axis=1) > 0][col].unique()) for col in ['vol_2g_mb_6',  'vol_3g_mb_6','monthly_2g_6', 'sachet_2g_6',
+ 'monthly_3g_6', 'sachet_3g_6','jun_vbc_3g']}
+
+
+# In[17]:
+
+
+# explore the columns 
+{col:list(t_df[t_df[jun_data_li].isnull().sum(axis=1) > 0][col].value_counts().index) for col in ['vol_2g_mb_6',  'vol_3g_mb_6','monthly_2g_6', 'sachet_2g_6',
+ 'monthly_3g_6', 'sachet_3g_6']}
+
+
+# __Observations__
+#   * From the above inspection, it is clear that there is no much variation in the columns - 'vol_2g_mb_6',  'vol_3g_mb_6','monthly_2g_6', 'sachet_2g_6',
+#  'monthly_3g_6', 'sachet_3g_6' and the value is 0. 
+#   * 'date_of_last_rech_data_6', 'total_rech_data_6', 'max_rech_data_6', 'count_rech_2g_6', 'count_rech_3g_6', 'av_rech_amt_data_6',  'arpu_3g_6', 'arpu_2g_6', 'fb_user_6' are not actually might not be nulls but __they are missing due to the fact that user might not have actually recharged for the data  services__.
+#   * Hence we would impute these columns with 0
+
+# In[18]:
+
+
+# Imputate the NULLS with 0
+t_df["date_of_last_rech_data_6"] = t_df["date_of_last_rech_data_6"].fillna("01/01/2015")
+t_df[jun_data_li] = t_df[jun_data_li].fillna(0)
+t_df[jun_data_li].isnull().sum()
+
+
+# ### Explore the Data columns for July having Null values
+
+# In[19]:
+
+
+# explore null values across June data services
+t_df[jul_data_li].isnull().sum()
+
+
+# __Observations__
+#   * 'date_of_last_rech_data_7', 'total_rech_data_7', 'max_rech_data_7',
+#  'count_rech_2g_7', 'count_rech_3g_7', 'av_rech_amt_data_7','arpu_3g_7', 'arpu_2g_7', 'fb_user_7' have equal no of null values
+#   * 'vol_2g_mb_7',  'vol_3g_mb_7','monthly_2g_7', 'sachet_2g_7',
+#  'monthly_3g_7', 'sachet_3g_7' and jul_vbc_3g do not have null values                     
+
+# In[20]:
+
+
+# Explore the columns and unique values 
+{col:len(t_df[t_df[jul_data_li].isnull().sum(axis=1) > 0][col].unique()) for col in ['vol_2g_mb_7',  'vol_3g_mb_7','monthly_2g_7', 'sachet_2g_7',
+ 'monthly_3g_7', 'sachet_3g_7','jul_vbc_3g']}
+
+
+# In[21]:
+
+
+# explore the columns 
+{col:list(t_df[t_df[jul_data_li].isnull().sum(axis=1) > 0][col].value_counts().index) for col in ['vol_2g_mb_7',  'vol_3g_mb_7','monthly_2g_7', 'sachet_2g_7',
+ 'monthly_3g_7', 'sachet_3g_7']}
+
+
+# __Observations__
+#   * From the above inspection, it is clear that there is no much variation in the columns - 'vol_2g_mb_7',  'vol_3g_mb_7','monthly_2g_7', 'sachet_2g_7',
+#  'monthly_3g_7', 'sachet_3g_7' and the value is 0. 
+#   * 'date_of_last_rech_data_7', 'total_rech_data_7', 'max_rech_data_7', 'count_rech_2g_7', 'count_rech_3g_7', 'av_rech_amt_data_7',  'arpu_3g_7', 'arpu_2g_7', 'fb_user_7' are not actually might not be nulls but __they are missing due to the fact that user might not have actually recharged for the data  services__.
+#   * Hence we would impute these columns with 0
+
+# In[22]:
+
+
+# Imputate the NULLS with 0
+t_df["date_of_last_rech_data_7"] = t_df["date_of_last_rech_data_7"].fillna("01/01/2015")
+t_df[jul_data_li] = t_df[jul_data_li].fillna(0)
+t_df[jul_data_li].isnull().sum()
+
+
+# ### Explore the Data columns for August having Null values
+
+# In[23]:
+
+
+# explore null values across August data services
+t_df[aug_data_li].isnull().sum()
+
+
+# __Observations__
+#   * 'date_of_last_rech_data_8', 'total_rech_data_8', 'max_rech_data_8',
+#  'count_rech_2g_8', 'count_rech_3g_8', 'av_rech_amt_data_8',  'arpu_3g_8', 'arpu_2g_8', 'monthly_2g_8', 'sachet_2g_8', 'monthly_3g_8', 'sachet_3g_8', 'fb_user_8', 'aug_vbc_3g' have equal no of null values
+#   * 'vol_2g_mb_8',  'vol_3g_mb_8','monthly_2g_8', 'sachet_2g_8',
+#  'monthly_3g_8', 'sachet_3g_8' and aug_vbc_3g do not have null values                     
+
+# In[24]:
+
+
+# Explore the columns and unique values 
+{col:len(t_df[t_df[aug_data_li].isnull().sum(axis=1) > 0][col].unique()) for col in ['vol_2g_mb_8',  'vol_3g_mb_8','monthly_2g_8', 'sachet_2g_8',
+ 'monthly_3g_8', 'sachet_3g_8','aug_vbc_3g']}
+
+
+# In[25]:
+
+
+# explore the columns 
+{col:list(t_df[t_df[aug_data_li].isnull().sum(axis=1) > 0][col].value_counts().index) for col in ['vol_2g_mb_8',  'vol_3g_mb_8','monthly_2g_8', 'sachet_2g_8',
+ 'monthly_3g_8', 'sachet_3g_8']}
+
+
+# __Observations__
+#   * From the above inspection, it is clear that there is no much variation in the columns - 'vol_2g_mb_8',  'vol_3g_mb_8','monthly_2g_8', 'sachet_2g_8',
+#  'monthly_3g_8', 'sachet_3g_8' the value is 0. 
+#   * 'date_of_last_rech_data_8', 'total_rech_data_8', 'max_rech_data_8', 'count_rech_2g_8', 'count_rech_3g_8', 'av_rech_amt_data_8',  'arpu_3g_8', 'arpu_2g_8', 'fb_user_8' are not actually might not be nulls but __they are missing due to the fact that user might not have actually recharged for the data  services__.
+#   * Hence we would impute these columns with 0
+
+# In[26]:
+
+
+# Imputate the NULLS with 0
+t_df["date_of_last_rech_data_8"] = t_df["date_of_last_rech_data_8"].fillna("01/01/2015")
+t_df[aug_data_li] = t_df[aug_data_li].fillna(0)
+t_df[aug_data_li].isnull().sum()
+
+
+# ### Explore the Data columns for September having Null values
+
+# In[27]:
+
+
+# explore null values across June data services
+t_df[sep_data_li].isnull().sum()
+
+
+# __Observations__
+#   * 'date_of_last_rech_data_9', 'total_rech_data_9', 'max_rech_data_9',
+#  'count_rech_2g_9', 'count_rech_3g_9', 'av_rech_amt_data_9', 'arpu_3g_9', 'arpu_2g_9', 'fb_user_9' have equal no of null values
+#   * 'vol_2g_mb_9',  'vol_3g_mb_9','monthly_2g_9', 'sachet_2g_9',
+#  'monthly_3g_9', 'sachet_3g_9' and 'sep_vbc_3g' do not have null values                     
+
+# In[28]:
+
+
+# Explore the columns and unique values 
+{col:len(t_df[t_df[sep_data_li].isnull().sum(axis=1) > 0][col].unique()) for col in ['vol_2g_mb_9', 'vol_3g_mb_9','monthly_2g_9', 'sachet_2g_9', 'monthly_3g_9', 'sachet_3g_9','sep_vbc_3g']}
+
+
+# In[29]:
+
+
+# explore the columns 
+{col:list(t_df[t_df[sep_data_li].isnull().sum(axis=1) > 0][col].value_counts().index) for col in ['vol_2g_mb_9', 'vol_3g_mb_9','monthly_2g_9', 'sachet_2g_9', 'monthly_3g_9', 'sachet_3g_9']}
+
+
+# __Observations__
+#   * From the above inspection, it is clear that there is no much variation in the columns - 'vol_2g_mb_9', 'vol_3g_mb_9','monthly_2g_9', 'sachet_2g_9', 'monthly_3g_9', 'sachet_3g_9' the value is 0. 
+#   * 'date_of_last_rech_data_9', 'total_rech_data_9', 'max_rech_data_9',
+#  'count_rech_2g_9', 'count_rech_3g_9', 'av_rech_amt_data_9', 'arpu_3g_9', 'arpu_2g_9', 'fb_user_9' are not actually might not be nulls but __they are missing due to the fact that user might not have actually recharged for the data  services__.
+#   * Hence we would impute these columns with 0
+
+# In[30]:
+
+
+# Imputate the NULLS with 0
+t_df["date_of_last_rech_data_9"] = t_df["date_of_last_rech_data_9"].fillna("01/01/2015")
+t_df[sep_data_li] = t_df[sep_data_li].fillna(0)
+t_df[sep_data_li].isnull().sum()
+
+
+# ## Derive high valued customers
+
+# In[31]:
+
+
+# Check and drop the duplicates if any
+t_df.drop_duplicates(inplace=True)
+t_df.shape
+
+
+# In[32]:
+
+
+# Create a list with quantiles
+q_li = [0.01,0.05,0.25,0.70,0.75,0.95,0.99,0.995]
+
+
+# In[33]:
+
+
+# derive high valued customers
+t_df["av_voice_rech"] = (t_df["total_rech_amt_6"]+t_df["total_rech_amt_7"])/2
+t_df["av_data_rech"] = ((t_df["av_rech_amt_data_6"] * t_df["total_rech_data_6"]) + (t_df["av_rech_amt_data_7"] * t_df["total_rech_data_7"]))/2
+t_df["hvc_avg_rech"] = t_df["av_voice_rech"] + t_df["av_data_rech"]
+t_df[["hvc_avg_rech"]].describe(q_li)
+
+
+# In[34]:
+
+
+# high value customers are the customers above 70th percentile wrt avg recharge amount during the good phase 
+hvc_df = t_df[t_df["hvc_avg_rech"]>=t_df.hvc_avg_rech.quantile([0.7]).values[0]]
+
+
+# In[35]:
+
+
+# Inspect high valued customers
+ov_df(hvc_df)
+
+
+# In[36]:
+
+
+# drop the columns which were created to derive HVC
+hvc_df.drop(["av_voice_rech","av_data_rech","hvc_avg_rech"],axis=1,inplace=True)
+
+
+# * Using the definition given in Business Objective derive the target variable if the customer can Churn In or Churn Out
+
+# ### Derive Target Column
+
+# In[37]:
+
+
+# list of features used to calculate customer churn
+ch_li = ["total_ic_mou_9","total_og_mou_9","vol_2g_mb_9","vol_3g_mb_9"]
+
+
+# In[38]:
+
+
+# Check if there are any nulls in the columns with which we derive target variable
+per_col_null(hvc_df[ch_li])
+
+
+# In[39]:
+
+
+# Function to validate and generate the customer will churn or not
+def churn(row):
+    if(((row.total_ic_mou_9==0) | (row.total_og_mou_9==0)) & ((row.vol_2g_mb_9==0) & (row.vol_3g_mb_9==0))):
+        return 1
+    else:
+        return 0
+
+hvc_df["Churn"] = hvc_df[ch_li].apply(lambda x: churn(x),axis=1)
+
+
+# In[40]:
+
+
+# Target variable and value counts
+hvc_df.Churn.value_counts(dropna=False)
+
+
+# ### Drop the features related to churn phase
+
+# In[41]:
+
+
+# all the features
+cols_lis = list(hvc_df.columns)
+len(cols_lis)
+
+# derive list of features related to churn phase
+pattern = r'_9|sep'
+churn_li = list(filter(lambda x : re.search(pattern,x) ,cols_lis))
+print(churn_li,len(churn_li))
+
+# drop the features realted to month of September
+hvc_df.drop(churn_li,axis=1,inplace=True)
+
+
+# In[42]:
+
+
+# Explore the shape of the df
+hvc_df.shape
+
+
+# # Exploratary Data Analysis
+
+# ### Inspecting the data pre-clean up
+# 
+
+# #### % of Churn Rate
+
+# In[43]:
+
+
+# % Churn rate
+100*(sum(hvc_df['Churn'] == 0)/len(hvc_df['Churn']))
+
+
+# In[44]:
+
+
+# plot Lead conversion variable Non conversion
+plt.figure(figsize=(5,5))
+sns.set(font_scale=1.2,palette='PuOr_r')
+explode = (0.5,0.0)
+labels = '0-Not Churn', '1-Churn'
+plt.pie(hvc_df['Churn'].value_counts(),autopct='%1.2f%%',explode=explode,labels=labels)
+plt.title("Imbalance Check of Target Variable pre clean-up")
+plt.axis('equal')
+plt.show()
+
+
+# ## Inspect the Null Values in t_df
+
+# In[45]:
+
+
+# Null values in the Application DF. 
+# per_col_null is local function which returns the % of null columns which are non zero
+per_col_null(hvc_df)
+
+
+# In[46]:
+
+
+col_null = round((hvc_df.isnull().sum().sort_values(ascending=False)/len(hvc_df))*100,4)
+null_cols_drop = list(col_null[col_null>40].index)
+
+
+# __Observations__
+#   *  As we can see clearly, 
+
+# In[47]:
+
+
+hvc_df.drop(null_cols_drop,axis=1,inplace=True)
+
+
+# In[48]:
+
+
+# Null values in the HVC DF. 
+# per_col_null is local function which returns the % of null columns which are non zero
+per_col_null(hvc_df)
+
+
+# In[49]:
+
+
+# drop the rows which have null values
+hvc_df.dropna(inplace=True)
+
+
+# In[50]:
+
+
+# Null values in the HVC DF. 
+# per_col_null is local function which returns the % of null columns which are non zero
+per_col_null(hvc_df)
+
+
+# In[51]:
+
+
+# Overview of the df
+ov_df(hvc_df)
+
+
+# In[52]:
+
+
+# Update the list of numerical and categorical variables for future analysis
+h_num_li = list(hvc_df.select_dtypes(include=np.number).columns)
+h_cat_li = list(hvc_df.select_dtypes(exclude=np.number).columns)
+print(color.BOLD+"\nNumerical Columns -"+color.END,h_num_li)
+print(color.BOLD+"\nCategorical Columns -"+color.END,h_cat_li)
+
+
+# In[53]:
+
+
+# Inspect the Numerical columns
+hvc_df[h_num_li].head()
+
+
+# In[54]:
+
+
+# Inspect the Categorical columns
+hvc_df[h_cat_li].head()
+
+
+# In[55]:
+
+
+list(h_cat_li)
+
+
+# ### Transformations of columns with Date
+
+# * 'last_date_of_month_6', 'last_date_of_month_7', 'last_date_of_month_8', 'date_of_last_rech_6', 'date_of_last_rech_7',
+#  'date_of_last_rech_8' have date with same year but different month and date.
+# * As there is no variance across 'last_date_of_month_6', 'last_date_of_month_7', 'last_date_of_month_8' - we can drop these columns after extracting the number of days and recharge day of the month
+
+# In[56]:
+
+
+# Extract the day from the data frame
+hvc_df[h_cat_li] = hvc_df[h_cat_li].applymap(lambda x: datetime.strptime(x,"%m/%d/%Y").strftime("%d"))
+
+
+# In[57]:
+
+
+# converting the categorical column to numerical type
+hvc_df[h_cat_li] = col_cast(hvc_df[h_cat_li],int,*h_cat_li)
+
+
+# In[58]:
+
+
+# derive no of days after which reacharge is performed.
+hvc_df["date_of_last_rech_6"] = hvc_df["last_date_of_month_6"] - hvc_df["date_of_last_rech_6"]
+hvc_df["date_of_last_rech_7"] = hvc_df["last_date_of_month_7"] - hvc_df["date_of_last_rech_7"]
+hvc_df["date_of_last_rech_8"] = hvc_df["last_date_of_month_8"] - hvc_df["date_of_last_rech_8"]
+
+
+# In[59]:
+
+
+# derive the columns where there is no much variance
+cols2drop = [col for col in hvc_df.columns if len(hvc_df[col].unique()) == 1]
+cols2drop
+
+
+# In[60]:
+
+
+# drop the columns which do not have any variance
+hvc_df.drop(cols2drop,axis=1,inplace=True)
+
+
+# In[61]:
+
+
+# store the mobile number into different df
+m_no_df = hvc_df.pop("mobile_number")
+
+
+# In[62]:
+
+
+# Inspect the data frame
+print(m_no_df.head())
+ov_df(hvc_df)
+
+
+# In[63]:
+
+
+hvc_df = col_cast(hvc_df,"object",*['monthly_2g_6', 'monthly_2g_7', 'monthly_2g_8', 'Churn'])
+hvc_df.head()
+
+
+# In[64]:
+
+
+# Update the list of numerical and categorical variables for future analysis
+h_num_li = list(hvc_df.select_dtypes(include=np.number).columns)
+h_cat_li = list(hvc_df.select_dtypes(exclude=np.number).columns)
+print(color.BOLD+"\nNumerical Columns -"+color.END,h_num_li)
+print(color.BOLD+"\nCategorical Columns -"+color.END,h_cat_li)
+
+
+# In[65]:
+
+
+# Inspect the Numerical columns
+display(hvc_df.shape)
+hvc_df[h_num_li].head(20)
+
+
+# ## Outlier detection in Numerical Variables
+
+# In[66]:
+
+
+# Create a list with quantiles
+q_li = [0.01,0.05,0.25,0.75,0.95,0.99,0.995,0.999,0.9995]
+
+
+# In[67]:
+
+
+# m_box_plt is local function which takes a df, rows, columns of subplot and name of columns as an argument and 
+# plots box plots
+# Part-1
+m_box_plt(hvc_df,80,2,*list(h_num_li[0:155]))
+
+
+# In[68]:
+
+
+# Inspect the columns more in detail for outliers
+hvc_df[h_num_li].describe(q_li)
+
+
+# In[69]:
+
+
+# dorp the rows beyond 99.995 percentile
+hvc_df = hvc_df[(hvc_df.arpu_6 < 3774) & (hvc_df.arpu_7 < 4122) & (hvc_df.arpu_8 < 3926) & (hvc_df.onnet_mou_6 < 4151) & (hvc_df.offnet_mou_6 < 4173) & (hvc_df.offnet_mou_7 < 4569) & (hvc_df.offnet_mou_8 < 4433) & (hvc_df.onnet_mou_7 < 4350) & (hvc_df.onnet_mou_8 < 4240) & (hvc_df.roam_ic_mou_6 < 920) & (hvc_df.roam_ic_mou_7 < 1016) & (hvc_df.roam_ic_mou_8 < 930) & (hvc_df.roam_og_mou_6 < 1457) & (hvc_df.roam_og_mou_7 < 1257) & (hvc_df.roam_og_mou_8 < 1380) & (hvc_df.loc_og_t2t_mou_6 < 3021) & (hvc_df.loc_og_t2t_mou_7 < 3143 ) & (hvc_df.loc_og_t2t_mou_8 < 2841 ) & (hvc_df.loc_og_t2m_mou_6 < 2570 ) & (hvc_df.loc_og_t2m_mou_7 < 2185 ) & (hvc_df.loc_og_t2m_mou_8 < 2415 )  & (hvc_df.loc_og_t2f_mou_6 < 353) & ( hvc_df.loc_og_t2f_mou_7 < 317) & ( hvc_df.loc_og_t2f_mou_8 < 286 ) & ( hvc_df.loc_og_t2c_mou_6 < 103) & ( hvc_df.loc_og_t2c_mou_7 < 120) & ( hvc_df.loc_og_t2c_mou_8 < 125) & ( hvc_df.loc_og_mou_6 < 3527) & ( hvc_df.loc_og_mou_7 < 3600) & ( hvc_df.loc_og_mou_8 < 3344 ) & (hvc_df.jun_vbc_3g < 4920) & (hvc_df.jul_vbc_3g < 5140) & (hvc_df.aug_vbc_3g < 4740) & (hvc_df.total_rech_num_6 < 89 ) & ( hvc_df.total_rech_num_7 < 85  ) & ( hvc_df.total_rech_num_8 < 82 ) & ( hvc_df.total_rech_amt_6 < 3867 ) & ( hvc_df.total_rech_amt_7 < 3867 ) & ( hvc_df.total_rech_amt_8 < 4020 ) & ( hvc_df.max_rech_amt_6 < 2001  ) & ( hvc_df.max_rech_amt_7 < 2101 ) & ( hvc_df.max_rech_amt_8 < 2101 )]
+
+
+# In[70]:
+
+
+ov_df(hvc_df)
+
+
+# __Observations__
+#   * As we observe, across all the columns there is sharp rise more than a standard deviation after 99.5th percentile. Hence I tried to drop all the rows beyond 99.5th percentile
+
+# ### Inspecting the data pre-clean up
+# 
+
+# #### % of Churn Rate
+
+# In[71]:
+
+
+# % Churn rate
+100*(sum(hvc_df['Churn'] == 1)/len(hvc_df['Churn']))
+
+
+# In[72]:
+
+
+# plot Lead conversion variable Non conversion
+plt.figure(figsize=(5,5))
+sns.set(font_scale=1.2,palette='PuOr_r')
+explode = (0.5,0.0)
+labels = '0-Not Churn', '1-Churn'
+plt.pie(hvc_df['Churn'].value_counts(),autopct='%1.2f%%',explode=explode,labels=labels)
+plt.title("Imbalance Check of Target Variable pre clean-up")
+plt.axis('equal')
+plt.show()
+
+
+# ## Univariate analysis
+
+# ### Univariate Analysis of Categorical Variables
+
+# In[73]:
+
+
+# Inspect list of categorical variables
+print(h_cat_li) 
+
+
+# In[74]:
+
+
+# cnt_plt is local function which takes a df, rows, columns of subplot and name of columns as an argument and 
+# plots frequency  plots
+# Part-1
+cnt_plt(hvc_df,3,2,*h_cat_li[0:6])
+
+
+# __Inferences__
+# 1. Majority of the houses are 1-STORY 1946 & NEWER ALL STYLES. 
+# 2. 80% of the houses are in Residential Low Density
+# 3. 99% of the houses can be accessed by Pavement. Hence this is not very important feature and this would be dropped.
+# 4. Very few houses are accessed by Alley and need to check the correlation before dropping this feature.
+# 5. 65% of the houses have regular shaping while 34% have irregular shaping
+# 6. 91% of the flats are built with flat surface and very few have irregular surface.
+
+# ## Bivariate analysis
+
+# ### Correlation of the numerical variables
+
+# In[123]:
+
+
+plt.figure(figsize=(40,35))
+ax = sns.heatmap(round(hvc_df[h_num_li].corr(),2),cmap="RdYlGn", annot=True,square=True)
+bottom, top = ax.get_ylim()
+ax.set_ylim(bottom + 0.5, top - 0.5)
+plt.show()
+
+
+# In[75]:
+
+
+corr = list()
+corrmat = round(hvc_df[h_num_li].corr(),2)
+corrmat = corrmat[((corrmat>=0.75) & (corrmat<1)) |(corrmat<=-0.75)]
+for col in corrmat:
+    temp = list()
+    pos_corr = corrmat[col].argmax()
+    neg_corr = corrmat[col].argmin()
+    if (pd.isna(pos_corr)==False):
+        if (pos_corr == neg_corr):
+            temp.append(col)
+            temp.append(pos_corr)
+            corr.append(temp)
+        elif (pos_corr != neg_corr):
+            temp.append(col)
+            temp.append(pos_corr)
+            temp.append(neg_corr)
+            corr.append(temp)
+corr_df = pd.DataFrame()
+col=[]
+corrltd_col=[]
+for each in corr:
+    #print(each)
+    t1 = each.pop(0)
+    corrltd_col.append(each)
+    col.append(t1)
+    #corrltd_col.append(each)
+corr_df['col'] = col
+corr_df['correlated_col'] = corrltd_col
+corr_df.head(10)
+
+
+# In[76]:
+
+
+from collections import Counter
+tem = []
+for each in corr_df['correlated_col']:
+    for val in each:
+        tem.append(val)
+Counter(tem).most_common(50)
+
+
+# In[107]:
+
+
+'''for each in hvc_df[h_num_li].columns:
+    print("Correlation for Column - ", each)
+    corrmat = round(hvc_df[h_num_li].corr(),1)
+    k = 5
+    cols = corrmat.nlargest(k, each)[each].index 
+    cm = np.corrcoef(hvc_df[h_num_li][cols].values.T) 
+    f, ax = plt.subplots(figsize =(3, 3)) 
+    sns.heatmap(cm, ax = ax, cmap ="coolwarm", linewidths = 0.1, annot=True, square=True, yticklabels = cols.values,  xticklabels = cols.values)
+    plt.show()
+
+    corrmat = round(hvc_df[h_num_li].corr(),1)
+    k = 5 
+    cols = corrmat.nsmallest(k, each)[each].index 
+    cm = np.corrcoef(hvc_df[h_num_li][cols].values.T)
+    f, ax = plt.subplots(figsize =(3,3)) 
+    sns.heatmap(cm, ax = ax, cmap ="coolwarm", linewidths = 0.1, annot=True, square=True, yticklabels = cols.values, xticklabels = cols.values)
+    plt.show()
+    
+    print("*"*50)
+'''
+
+
+# The most positively and negatively corelated features with the below columns 
+# * arpu_6 are (total_rech_amt_6) and (count_rech_2g_7,sachet_2g_7) respectively.
+# 
+
+# ### Correlation of the categorical variables with respect to Target variable "Churn"
+
+# #### Create a features list with Voice Usage, Data Usage, Voice Revenue and Data Revenue
+
+# In[78]:
+
+
+# derive list of features related to voice usage
+pattern = (r'loc|std|ic|og|mou')
+voice_usg = list(filter(lambda x : re.search(pattern,x) , list(hvc_df.columns)))
+print(voice_usg)
+print("Length of Voice Usage Features",len(voice_usg))
+
+
+# In[79]:
+
+
+# derive list of features related to data usage
+pattern = (r'vol|vbc|fb_user|monthly|sachet')
+data_usg = list(filter(lambda x : re.search(pattern,x) , list(hvc_df.columns)))
+print(data_usg)
+print("Length of Data Usage Features",len(data_usg))
+
+
+# In[80]:
+
+
+# derive list of features related to voice revenue
+pattern = (r'rech_amt_(6|7|8)|arpu_(6|7|8)|rech_num|rch_amt|last_rech')
+voice_rev = list(filter(lambda x : re.search(pattern,x) , list(hvc_df.columns)))
+print(voice_rev)
+print("Length of Data Usage Features",len(voice_rev))
+
+
+# In[81]:
+
+
+# derive list of features related to data revenue
+pattern = (r'rech_amt_data|rech_data|arpu_(2g|3g)|count_rech')
+data_rev = list(filter(lambda x : re.search(pattern,x) , list(hvc_df.columns)))
+print(data_rev)
+print("Length of Data Usage Features",len(data_rev))
+
+
+# In[82]:
+
+
+# Misc features
+misc_fea = list(set(hvc_df.columns).difference(set(voice_usg).union(set(data_usg).union(set(voice_rev).union(set(data_rev))))))
+print(misc_fea)
+print("Length of Data Usage Features",len(misc_fea))
+
+
+# In[83]:
+
+
+#  Function to plot 2 or more box plots
+def comp_box_plt(l_df,n_r,n_c,l_dep,*args):
+    j=1
+    rot = 0
+    if n_c == 1 and n_r == 1:
+        rot = 90
+    fig_h = n_r * 5
+    plt.figure(1,figsize=(20,fig_h))
+    # set palette 
+    palette = itertools.cycle(sns.color_palette())
+    sns.set(style="whitegrid",font_scale=1,palette='Set2')
+
+    for i in args:
+        plt.subplot(n_r,n_c,j)
+        sns.boxplot(x=l_dep,y=i,orient="v",data=l_df,hue=l_dep)
+        plt.title('{} spread across {}'.format(l_dep,i),fontsize=12)
+        j+=1
+    plt.show()
+
+
+# In[84]:
+
+
+# comp_box_plt is local function which takes a df,target column, rows, columns of subplot and name of columns as an argument and 
+# plots box plots
+# correlation of price with other categorical variables
+# Part-I
+comp_box_plt(hvc_df,88,1,"Churn",*voice_usg)
+
+
+# __Inferences__
+# 1. Target variable SalesPrice is correlated with all the features except with LotShape
+
+# In[85]:
+
+
+# comp_box_plt is local function which takes a df,target column, rows, columns of subplot and name of columns as an argument and 
+# plots box plots
+# correlation of price with other categorical variables
+# Part-I
+comp_box_plt(hvc_df,25,1,"Churn",*data_usg)
+
+
+# In[86]:
+
+
+# comp_box_plt is local function which takes a df,target column, rows, columns of subplot and name of columns as an argument and 
+# plots box plots
+# correlation of price with other categorical variables
+# Part-III
+comp_box_plt(hvc_df,22,1,"Churn",*voice_rev)
+
+
+# __Inferences__
+# 1. Target variable SalesPrice is correlated with all the features except with LotConfig
+
+# In[87]:
+
+
+# comp_box_plt is local function which takes a df,target column, rows, columns of subplot and name of columns as an argument and 
+# plots box plots
+# correlation of price with other categorical variables
+# Part-IV
+comp_box_plt(hvc_df,25,1,"Churn",*data_rev)
+
+
+# __Inferences__
+# 1. Target variable SalesPrice is correlated with all the features in the above part.
+
+# In[88]:
+
+
+# comp_box_plt is local function which takes a df,target column, rows, columns of subplot and name of columns as an argument and 
+# plots box plots
+# correlation of price with other categorical variables
+# Part-V
+comp_box_plt(hvc_df,88,1,"Churn",misc_fea[1])
+
+
+# # Preparing the data for modelling(encoding,train-test split, rescaling etc)
+
+# ## Split the target variable from the data
+
+# In[89]:
+
+
+# Split the target variable
+X = hvc_df.drop("Churn",axis=1)
+y = hvc_df.Churn
+
+y=y.astype('int')
+
+# Check the shape of X and y
+display(X.shape)
+display(y.shape)
+
+
+# ## Handling Imbalance
+
+# In[90]:
+
+
+# % Churn rate before imbalance
+100*(y.value_counts()/y.shape[0])
+
+
+# In[92]:
+
+
+from imblearn.over_sampling import SMOTE
+from imblearn.combine import SMOTEENN
+
+# define oversample strategy
+smot = SMOTE(random_state=rndm_stat,sampling_strategy=1)
+
+# fit and apply the transform
+X_sm, y_sm = smot.fit_resample(X, y)
+
+
+# In[93]:
+
+
+# % Churn rate after imbalance
+100*(y_sm.value_counts()/y.shape[0])
+
+
+# In[218]:
+
+
+# Combining the X_sm and y_sm to make a Balanced dataframe
+Balanced_df = X_sm.copy()
+print(Balanced_df.shape)
+Balanced_df['Churn'] = y_sm
+print(Balanced_df.shape)
+Balanced_df.head()
+
+
+# In[94]:
+
+
+# explore the shape of Target and independent variables
+display(X.shape)
+display(y.shape)
+
+
+# In[95]:
+
+
+# explore the shape of Target and independent variables after imbalance
+display(X_sm.shape)
+display(y_sm.shape)
+
+
+# ## Splitting the data into train and test
+
+# In[96]:
+
+
+X_train,X_test, y_train, y_test = train_test_split(X_sm,y_sm,random_state=rndm_stat,test_size=0.3)
+
+
+# ### Rescaling of the variables
+
+# In[97]:
+
+
+print(X_train.shape)
+print(y_train.shape)
+print(X_test.shape)
+print(y_test.shape)
+
+
+# In[98]:
+
+
+# 2 Models are created and hence 2 copies of df_train and test to perform the analysis
+X1_train = X_train.copy()
+X2_train = X_train.copy()
+
+y1_train = y_train.copy()
+y2_train = y_train.copy()
+
+X1_test = X_test.copy()
+X2_test = X_test.copy()
+
+y1_test = y_test.copy()
+y2_test = y_test.copy()
+
+
+# In[100]:
+
+
+# List of features that need to be scaled
+# add other columns to h_num_li which needs to be scaled
+scl_li = list(X_train.columns)
+
+
+# ### Scaling of Transform Data LR Model 1 and Model 2 using Standardization
+
+# In[101]:
+
+
+# 1. Initiate an object
+scaler = StandardScaler()
+
+# 2. Fit and transform on data
+X1_train[scl_li] = scaler.fit_transform(X1_train[scl_li])
+
+display(X1_train.head())
+
+
+# ### Scaling of Test Data LR Model 1 using Standardization
+
+# In[102]:
+
+
+# Transform test data
+X1_test[scl_li] = scaler.transform(X1_test[scl_li])
+
+display(X1_test.head())
+
+
+# # Model for Interpreting the important predictors
+
+# ## Logistic Model - using statsmodel library
+
+# In[103]:
+
+
+# As the VIF calculation is very important, following function would help in calculating the VIF several times
+def vif_calc(l_df):
+    vif = pd.DataFrame()
+    vif['Features'] = l_df.columns
+    vif['VIF'] = [variance_inflation_factor(l_df.values, i) for i in range(l_df.shape[1])]
+    vif['VIF'] = round(vif['VIF'], 2)
+    vif = vif.sort_values(by = "VIF", ascending = False).reset_index(drop=True)
+    display(vif)
+
+
+# In[104]:
+
+
+import statsmodels
+import statsmodels.api as sm
+from sklearn.feature_selection import RFE
+from sklearn import metrics
+
+
+# In[105]:
+
+
+# Logistic Regression Model
+log_m1 = sm.GLM(y1_train,(sm.add_constant(X1_train)),family = sm.families.Binomial())
+log_m1.fit().summary()
+
+
+# In[106]:
+
+
+# Running RFE with the output number of the variable equal to 30
+log_rfe = LogisticRegression()
+
+rfe = RFE(log_rfe, 30)             # running RFE
+rfe = rfe.fit(X1_train, y1_train)
+
+
+# In[107]:
+
+
+# display the features created using RFE 
+print(list(zip(X1_train.columns,rfe.support_,rfe.ranking_)))
+
+
+# In[108]:
+
+
+# create a list of 30 columns created using RFE
+rfe_cols = X1_train.columns[rfe.support_]
+display(rfe_cols)
+
+
+# In[110]:
+
+
+# Create a new df with only columns selected by RFE
+X1_train_ref = X1_train[rfe_cols]
+
+# Inspect the DF
+display(X1_train_ref.head())
+
+
+# In[111]:
+
+
+# LR Modeling using Statsmodel
+X1_train_sm = sm.add_constant(X1_train_ref)
+m1_log_sm = sm.GLM(y1_train,X1_train_sm,family=sm.families.Binomial())
+m1_log_sm_model = m1_log_sm.fit()
+display(m1_log_sm_model.summary())
+vif_calc(X1_train_ref)
+
+
+# ### Drop the columns based on below thumb rules
+
+# * Significance levels and VIF are 2 important things that will make us in deciding to drop our features
+#   - High P-Value(above 0.05) and High VIF(above 5%)__ - They can be dropped 
+#   - Low P-Value(below 0.05) and Low VIF(below 5%)__ - They can be retained
+
+# #### Dropping  column sachet_2g_7
+
+# In[112]:
+
+
+X1_train_ref = X1_train_ref.drop("sachet_2g_7",axis=1)
+# LR Modeling using Statsmodel
+X1_train_sm = sm.add_constant(X1_train_ref)
+m1_log_sm = sm.GLM(y1_train,X1_train_sm,family=sm.families.Binomial())
+m1_log_sm_model = m1_log_sm.fit()
+display(m1_log_sm_model.summary())
+vif_calc(X1_train_ref)
+
+
+# #### Dropping  column sachet_2g_6
+
+# In[113]:
+
+
+X1_train_ref = X1_train_ref.drop("sachet_2g_6",axis=1)
+# LR Modeling using Statsmodel
+X1_train_sm = sm.add_constant(X1_train_ref)
+m1_log_sm = sm.GLM(y1_train,X1_train_sm,family=sm.families.Binomial())
+m1_log_sm_model = m1_log_sm.fit()
+display(m1_log_sm_model.summary())
+vif_calc(X1_train_ref)
+
+
+# #### Dropping  column sachet_2g_8
+
+# In[114]:
+
+
+X1_train_ref = X1_train_ref.drop("sachet_2g_8",axis=1)
+# LR Modeling using Statsmodel
+X1_train_sm = sm.add_constant(X1_train_ref)
+m1_log_sm = sm.GLM(y1_train,X1_train_sm,family=sm.families.Binomial())
+m1_log_sm_model = m1_log_sm.fit()
+display(m1_log_sm_model.summary())
+vif_calc(X1_train_ref)
+
+
+# #### Dropping  column sachet_3g_8
+
+# In[115]:
+
+
+X1_train_ref = X1_train_ref.drop("sachet_3g_8",axis=1)
+# LR Modeling using Statsmodel
+X1_train_sm = sm.add_constant(X1_train_ref)
+m1_log_sm = sm.GLM(y1_train,X1_train_sm,family=sm.families.Binomial())
+m1_log_sm_model = m1_log_sm.fit()
+display(m1_log_sm_model.summary())
+vif_calc(X1_train_ref)
+
+
+# #### Dropping  column sachet_3g_7
+
+# In[116]:
+
+
+X1_train_ref = X1_train_ref.drop("sachet_3g_7",axis=1)
+# LR Modeling using Statsmodel
+X1_train_sm = sm.add_constant(X1_train_ref)
+m1_log_sm = sm.GLM(y1_train,X1_train_sm,family=sm.families.Binomial())
+m1_log_sm_model = m1_log_sm.fit()
+display(m1_log_sm_model.summary())
+vif_calc(X1_train_ref)
+
+
+# #### Dropping  column sachet_3g_6
+
+# In[117]:
+
+
+X1_train_ref = X1_train_ref.drop("sachet_3g_6",axis=1)
+# LR Modeling using Statsmodel
+X1_train_sm = sm.add_constant(X1_train_ref)
+m1_log_sm = sm.GLM(y1_train,X1_train_sm,family=sm.families.Binomial())
+m1_log_sm_model = m1_log_sm.fit()
+display(m1_log_sm_model.summary())
+vif_calc(X1_train_ref)
+
+
+# #### Dropping  column count_rech_2g_6
+
+# In[118]:
+
+
+X1_train_ref = X1_train_ref.drop("count_rech_2g_6",axis=1)
+# LR Modeling using Statsmodel
+X1_train_sm = sm.add_constant(X1_train_ref)
+m1_log_sm = sm.GLM(y1_train,X1_train_sm,family=sm.families.Binomial())
+m1_log_sm_model = m1_log_sm.fit()
+display(m1_log_sm_model.summary())
+vif_calc(X1_train_ref)
+
+
+# #### Dropping  column std_og_t2t_mou_7
+
+# In[119]:
+
+
+X1_train_ref = X1_train_ref.drop("std_og_t2t_mou_7",axis=1)
+# LR Modeling using Statsmodel
+X1_train_sm = sm.add_constant(X1_train_ref)
+m1_log_sm = sm.GLM(y1_train,X1_train_sm,family=sm.families.Binomial())
+m1_log_sm_model = m1_log_sm.fit()
+display(m1_log_sm_model.summary())
+vif_calc(X1_train_ref)
+
+
+# #### Dropping  column monthly_2g_6
+
+# In[120]:
+
+
+### Dropping  column std_og_t2t_mou_7
+
+X1_train_ref = X1_train_ref.drop("monthly_2g_6",axis=1)
+# LR Modeling using Statsmodel
+X1_train_sm = sm.add_constant(X1_train_ref)
+m1_log_sm = sm.GLM(y1_train,X1_train_sm,family=sm.families.Binomial())
+m1_log_sm_model = m1_log_sm.fit()
+display(m1_log_sm_model.summary())
+vif_calc(X1_train_ref)
+
+
+# #### Dropping  column total_rech_data_6
+
+# In[121]:
+
+
+### Dropping  column std_og_t2t_mou_7
+
+X1_train_ref = X1_train_ref.drop("total_rech_data_6",axis=1)
+# LR Modeling using Statsmodel
+X1_train_sm = sm.add_constant(X1_train_ref)
+m1_log_sm = sm.GLM(y1_train,X1_train_sm,family=sm.families.Binomial())
+m1_log_sm_model = m1_log_sm.fit()
+display(m1_log_sm_model.summary())
+vif_calc(X1_train_ref)
+
+
+# #### Dropping  column loc_ic_mou_8
+
+# In[122]:
+
+
+X1_train_ref = X1_train_ref.drop("loc_ic_mou_8",axis=1)
+# LR Modeling using Statsmodel
+X1_train_sm = sm.add_constant(X1_train_ref)
+m1_log_sm = sm.GLM(y1_train,X1_train_sm,family=sm.families.Binomial())
+m1_log_sm_model = m1_log_sm.fit()
+display(m1_log_sm_model.summary())
+vif_calc(X1_train_ref)
+
+
+# ### Predicting on the train set
+
+# In[125]:
+
+
+y1_train_pred = m1_log_sm_model.predict(X1_train_sm)
+y1_train_pred.value_counts()
+
+
+# In[126]:
+
+
+y1_train_pred = y1_train_pred.values.reshape(-1)
+y1_train_pred[:10]
+
+
+# In[130]:
+
+
+y_trn_df = pd.DataFrame({"Actual_Churn":y1_train.values,"Predicted_Churn":y1_train_pred.astype(int)})
+y_trn_df["Cust_id"] = y1_train.index
+y_trn_df.head(10)
+
+
+# In[131]:
+
+
+def logr_metrics(actual,predict):
+    # Confusion Matrix
+    l_cm = metrics.confusion_matrix(actual,predict)
+    
+    # Extract TN,FP,FN,TP from confusion matrix
+    tnv,fpv,fnv,tpv = l_cm.ravel()
+    
+    # Calculate Accuracy, Sensitivity(TPR / Recall), Specificity, FPR, Precision (PPV), NPV
+    l_acc = (tnv+tpv) /(tnv+tpv+fnv+fpv)
+    l_sen = (tpv) /(tpv+fnv)
+    l_spec = (tnv) /(tnv+fpv)
+    l_fpr = (fpv) /(tnv+fpv)
+    l_prec = (tpv) /(tpv+fpv)
+    l_npv = (tnv) /(tnv+fnv)
+    l_f1_scr = 2*((l_prec*l_sen)/(l_prec+l_sen))
+    return(l_cm,l_acc,l_sen,l_spec,l_fpr,l_prec,l_npv,l_f1_scr)
+
+
+# In[132]:
+
+
+plt.figure(figsize = (5,5))
+tn, fp, fn, tp = confusion_matrix(y_trn_df.Actual_Churn,y_trn_df.Predicted_Churn).ravel()
+ax = sns.heatmap([[tn,fp],[fn,tp]],yticklabels=["Actual Churn","Actual Not Churn"],                 xticklabels=["Predicted Churn","Predicted Not Churn"],annot = True,fmt='d')
+ax.set_title('Confusion Matrix')
+bottom, top = ax.get_ylim()
+ax.set_ylim(bottom + 0.5, top - 0.5)
+
+
+# In[136]:
+
+
+# checking the overall accuracy.
+print("Model Accuracy : ", round(metrics.accuracy_score(y_trn_df.Actual_Churn,y_trn_df.Predicted_Churn),2))
+# Let's see the sensitivity of our logistic regression model
+print("Model Sensitivity/Recall : ", round(tp / float(tp+fn),2))
+print("Model specificity : ", round(tn / float(tn+fp),2))
+print("Model Precision : ", round(tp / float(tp+fp),2))
+print("F1 score : ", round(2*((tp / float(tp+fp)*(tp / float(tp+fn)))/((tp / float(tp+fp))+(tp / float(tp+fn)))),2))
+print("Model false postive rate : ", round(fp/ float(tn+fp),2))
+
+
+# In[ ]:
+
+
+
+
+
+# In[137]:
+
+
+## Function to plot ROC curve
+# This function takes y_actual and probability of labels, computes fpr and tpr to plot ROC
+
+def plt_roc(actual,prob):
+    fpr,tpr, thresholds = metrics.roc_curve(actual,prob,drop_intermediate = False)
+    auc_score = metrics.roc_auc_score(actual,prob)
+    plt.figure(1,figsize=(6,6))
+    plt.plot(fpr,tpr,color="red",label="ROC Curve (AUC = %0.2f)"%auc_score)
+    plt.plot([0,1],[0,1],color="darkblue",linestyle="--")
+    plt.xlabel('False Positive Rate')
+    plt.ylabel('True Positive Rate')
+    plt.title('Receiver Operating Characteristic (ROC) Curve')
+    plt.legend(loc="lower right")
+    plt.show()
+    return None
+
+
+# In[138]:
+
+
+# plot ROC
+plt_roc(y_trn_df.Actual_Churn,y_trn_df.Predicted_Churn)
+
+
+# ### Predicting on Test Data
+
+# In[139]:
+
+
+# drop the columns from test set
+X1_test = X1_test[X1_train_ref.columns]
+# add cons for X_test set
+X1_test_sm = sm.add_constant(X1_test)
+# predict y_test_pred based on our model
+y1_test_pred = m1_log_sm_model.predict(X1_test_sm)
+y1_test_pred[:10]
+
+
+# In[140]:
+
+
+y1_test_pred = y1_test_pred.values.reshape(-1)
+y1_test_pred[:10]
+
+
+# In[141]:
+
+
+y_test_df = pd.DataFrame({"Actual_Churn":y1_test.values,"Pred_Churn":y1_test_pred.astype(int)})
+y_test_df["Cust_id"] = y1_test.index
+y_test_df.head()
+
+
+# In[142]:
+
+
+plt.figure(figsize = (5,5))
+tn, fp, fn, tp = confusion_matrix(y_test_df.Actual_Churn,y_test_df.Pred_Churn).ravel()
+ax = sns.heatmap([[tn,fp],[fn,tp]],yticklabels=["Actual Churn","Actual Not Churn"],                 xticklabels=["Predicted Churn","Predicted Not Churn"],annot = True,fmt='d')
+ax.set_title('Confusion Matrix')
+bottom, top = ax.get_ylim()
+ax.set_ylim(bottom + 0.5, top - 0.5)
+
+
+# In[143]:
+
+
+# checking the overall accuracy.
+print("Model Accuracy : ", round(metrics.accuracy_score(y_test_df.Actual_Churn,y_test_df.Pred_Churn),2))
+# Let's see the sensitivity of our logistic regression model
+print("Model Sensitivity/Recall : ", round(tp / float(tp+fn),2))
+print("Model specificity : ", round(tn / float(tn+fp),2))
+print("Model Precision : ", round(tp / float(tp+fp),2))
+print("F1 score : ", round(2*((tp / float(tp+fp)*(tp / float(tp+fn)))/((tp / float(tp+fp))+(tp / float(tp+fn)))),2))
+print("Model false postive rate : ", round(fp/ float(tn+fp),2))
+
+
+# ### Important Predictors
+
+# In[146]:
+
+
+display(m1_log_sm_model.summary())
+
+
+# The most important predictors are -
+# * og_others_8
+# * total_ic_mou_8
+# * total_og_mou_8
+# * monthly_3g_8
+# * monthly_2g_8
+# * count_rech_2g_8
+# * total_rech_data_8
+# * std_og_mou_7
+# * loc_ic_mou_7
+# * fb_user_8
+# 
+
+# ## Logistic Model - using sklearn library
+
+# In[147]:
+
+
+# 1. Initiate an object
+scaler = StandardScaler()
+X2_train[scl_li] = scaler.fit_transform(X2_train[scl_li])
+display(X2_train.head())
+
+
+# In[148]:
+
+
+# Transform test data
+X2_test[scl_li] = scaler.transform(X2_test[scl_li])
+display(X2_test.head())
+
+
+# In[177]:
+
+
+# Running RFE with the output number of the variable equal to 30
+# Create an instance Logistic Regression
+m2_lr_model = LogisticRegression()
+
+rfe2 = RFE(m2_lr_model, 30)             # running RFE
+rfe2 = rfe2.fit(X2_train, y2_train)
+
+
+# In[178]:
+
+
+# Create a new df with only columns selected by RFE
+rfe2_cols = X2_train.columns[rfe2.support_]
+X2_train_ref = X2_train[rfe2_cols]
+
+# Inspect the DF
+display(X2_train_ref.head())
+
+
+# In[207]:
+
+
+# Fit the model
+m2_lr = m2_lr_model.fit(X2_train_ref,y2_train)
+
+# Caputuring the coefficients of the learnt model
+coef_dict = {}
+for coef, feat in zip(m2_lr.coef_[0,:],X2_train_ref.columns):
+    coef_dict[feat] = coef
+coef_dict
+
+
+# ### Predicting on the Train set
+
+# In[180]:
+
+
+y2_trn_pred = m2_lr.predict_proba(X2_train_ref)
+
+"{:2.2}".format(metrics.roc_auc_score(y2_train, y2_trn_pred[:,1]))
+
+
+# In[181]:
+
+
+# Plot the ROC Curve
+plt_roc(y2_train, y2_trn_pred[:,1])
+
+
+# In[182]:
+
+
+# Create a DF with Actual, Predicated probabilities
+y2_trn_df = pd.DataFrame({"Actual_Churn":y2_train.values,"Pred_Churn_Probs":y2_trn_pred[:,1]})
+
+
+# In[187]:
+
+
+# Predictions at different cutoff values
+met_cols = ["Prob","Accuracy","Sensitivity","Specificity","FPR","Prcesion","NPV","F1_Scr"]
+cut_df = pd.DataFrame( columns = met_cols)
+for i in range(10):
+    k = i/10
+    y2_trn_df[k] = y2_trn_df.Pred_Churn_Probs.map(lambda x: 1 if x > k else 0)
+    con_mat,ac,se,sp,fpra,prcn,nprv,f1scr = logr_metrics(y2_trn_df.Actual_Churn,y2_trn_df[k])
+    cut_df.loc[k] = [k,ac,se,sp,fpra,prcn,nprv,f1scr]
+
+display(y2_trn_df.head())
+display(cut_df)
+
+
+# #### Precision - Recall Curve : Finding Optimal Cutoff Point
+
+# In[189]:
+
+
+# Precision-Recall is a useful measure of success of prediction when the classes are very imbalanced.
+p, r, thresholds = metrics.precision_recall_curve(y2_trn_df.Actual_Churn, y2_trn_df.Pred_Churn_Probs)
+
+
+# In[190]:
+
+
+# Plot Precision - Recall Curve
+plt.plot(thresholds, p[:-1], "g-")
+plt.plot(thresholds, r[:-1], "r-")
+plt.show()
+
+
+# In[191]:
+
+
+y2_trn_df["final_pred"] = y2_trn_df.Pred_Churn_Probs.map(lambda x: 1 if x > 0.5 else 0)
+y2_trn_df.head()
+
+
+# #### Evaluation Metrics of LR Model - Train Set
+
+# In[192]:
+
+
+# Visualize the confusion matrix
+plt.figure(figsize = (5,5))
+tn, fp, fn, tp = confusion_matrix(y2_trn_df.Actual_Churn, y2_trn_df.Pred_Churn).ravel()
+ax = sns.heatmap([[tn,fp],[fn,tp]],yticklabels=["Actual Not_Churn","Actual Churn"],                 xticklabels=["Predicted Not_Churn","Predicted Churn"],annot = True,fmt='d')
+ax.set_title('Confusion Matrix')
+bottom, top = ax.get_ylim()
+ax.set_ylim(bottom + 0.5, top - 0.5)
+
+
+# In[195]:
+
+
+# Checking the metrics of our logistic regression model
+cm,acc,sen,spec,fpr,prec,npv,f1_scr = logr_metrics(y2_trn_df.Actual_Churn,y2_trn_df.Pred_Churn)
+print("Train Model Accuracy : ", acc)
+print("Train Model Sensitivity : ", sen)
+print("Train Model specificity : ", spec)
+print("Train Model Precision : ", prec)
+print("Train Model False Positive Rate : ", fpr)
+print("Train Model NPV : ", npv)
+print("Train Model F1 Score : ", f1_scr)
+
+
+# ### Predicting on Test Data
+
+# In[196]:
+
+
+X2_test_ref = X2_test[rfe2_cols]
+
+
+# In[197]:
+
+
+y2_test_pred = m2_lr.predict_proba(X2_test_ref)
+
+"{:2.2}".format(metrics.roc_auc_score(y2_test, y2_test_pred[:,1]))
+
+
+# In[198]:
+
+
+# Create a df with with actual and predicted probabilities
+y2_test_df = pd.DataFrame({"Actual_Churn":y2_test.values,"Pred_Conv_Probs":y2_test_pred[:,1]})
+# Populate the predicted values with cut_off value
+y2_test_df["Pred_Churn"] = y2_test_df.Pred_Conv_Probs.apply(lambda x: 1 if x > 0.5 else 0)
+
+
+# In[199]:
+
+
+# Visualize the confusion matrix
+plt.figure(figsize = (5,5))
+tn, fp, fn, tp = confusion_matrix(y2_test_df.Actual_Churn, y2_test_df.Pred_Churn).ravel()
+ax = sns.heatmap([[tn,fp],[fn,tp]],yticklabels=["Actual Not_Churn","Actual Churn"],                 xticklabels=["Predicted Not_Churn","Predicted Churn"],annot = True,fmt='d')
+ax.set_title('Confusion Matrix')
+bottom, top = ax.get_ylim()
+ax.set_ylim(bottom + 0.5, top - 0.5)
+
+
+# In[201]:
+
+
+# Metrics of our logistic regression model
+cm,acc,sen,spec,fpr,prec,npv,f1_scr = logr_metrics(y2_test_df.Actual_Churn, y2_test_df.Pred_Churn)
+print("Train Model Accuracy : ", acc)
+print("Train Model Sensitivity : ", sen)
+print("Train Model specificity : ", spec)
+print("Train Model Precision : ", prec)
+print("Train Model False Positive Rate : ", fpr)
+print("Train Model NPV : ", npv)
+print("Train Model F1 Score : ", f1_scr)
+
+
+# ### Feature Importance
+
+# The top features as per their high coefficients are - 
+# 
+# * 'sachet_2g_8'
+# * 'sachet_2g_6'
+# * 'sachet_2g_7'
+# * 'total_rech_data_6'
+# * 'total_rech_data_8'
+# * 'sachet_3g_6'
+# * 'count_rech_2g_8'
+# * 'total_rech_data_7'
+# * 'sachet_3g_7'
+# * 'count_rech_3g_6'
+# 
+
+# ## Decision Tree Model
+
+# In[209]:
+
+
+# Importing decision tree classifier from sklearn library
+from sklearn.tree import DecisionTreeClassifier
+
+# Fitting the decision tree with default hyperparameters, apart from
+# max_depth which is 5 so that we can plot and read the tree.
+dt_default = DecisionTreeClassifier(max_depth=5)
+dt_default.fit(X_train, y_train)
+
+
+# In[210]:
+
+
+# Let's check the evaluation metrics of our default model
+
+# Importing classification report and confusion matrix from sklearn metrics
+from sklearn.metrics import classification_report, confusion_matrix, accuracy_score
+
+# Making predictions
+y_pred_default = dt_default.predict(X_test)
+
+# Printing classification report
+print(classification_report(y_test, y_pred_default))
+
+
+# In[211]:
+
+
+# Printing confusion matrix and accuracy
+print(confusion_matrix(y_test,y_pred_default))
+print(accuracy_score(y_test,y_pred_default))
+
+
+# In[222]:
+
+
+# Importing required packages for visualization
+from IPython.display import Image  
+from sklearn.externals.six import StringIO  
+from sklearn.tree import export_graphviz
+import pydotplus, graphviz
+
+# Putting features
+features = list(Balanced_df.columns[1:])
+
+
+# In[220]:
+
+
+# plotting tree with max_depth=5
+dot_data = StringIO()  
+export_graphviz(dt_default, out_file=dot_data,
+                feature_names=features, filled=True,rounded=True)
+
+graph = pydotplus.graph_from_dot_data(dot_data.getvalue())  
+Image(graph.create_png())
+
+
+# ### Hyperparameter tuning for DT
+
+# In[221]:
+
+
+# Create the parameter grid 
+param_grid = {
+    'max_depth': range(5, 15, 5),
+    'min_samples_leaf': range(50, 150, 50),
+    'min_samples_split': range(50, 150, 50),
+    'criterion': ["entropy", "gini"]
+}
+
+n_folds = 5
+
+# Instantiate the grid search model
+dtree = DecisionTreeClassifier()
+grid_search = GridSearchCV(estimator = dtree, param_grid = param_grid, 
+                          cv = n_folds, verbose = 1)
+
+# Fit the grid search to the data
+grid_search.fit(X_train,y_train)
+
+
+# In[223]:
+
+
+# cv results
+cv_results = pd.DataFrame(grid_search.cv_results_)
+cv_results
+
+
+# In[224]:
+
+
+# printing the optimal accuracy score and hyperparameters
+print("best accuracy", grid_search.best_score_)
+print(grid_search.best_estimator_)
+
+
+# In[240]:
+
+
+# model with optimal hyperparameters
+clf_gini = DecisionTreeClassifier(criterion = "gini", 
+                                  random_state = 100,
+                                  max_depth=10, 
+                                  min_samples_leaf=50,
+                                  min_samples_split=50)
+clf_gini.fit(X_train, y_train)
+
+
+# In[244]:
+
+
+# Caputuring the coefficients of the learnt model
+coef_dict = {}
+for coef, feat in zip(clf_gini.feature_importances_,X_train.columns):
+    coef_dict[feat] = coef
+coef_dict
+
+
+# ### Predicting on Test Set
+
+# In[242]:
+
+
+# accuracy score
+clf_gini.score(X_test,y_test)
+
+
+# In[243]:
+
+
+# plotting the tree
+dot_data = StringIO()  
+export_graphviz(clf_gini, out_file=dot_data,feature_names=features,filled=True,rounded=True)
+
+graph = pydotplus.graph_from_dot_data(dot_data.getvalue())  
+Image(graph.create_png())
+
+
+# In[232]:
+
+
+# classification metrics
+y_pred = clf_gini.predict(X_test)
+print(classification_report(y_test, y_pred))
+
+
+# In[233]:
+
+
+# confusion matrix
+print(confusion_matrix(y_test,y_pred))
+
+
+# ### Important Fetaures
+
+# The top important features that help in prediction are -
+# * 'roam_og_mou_8'
+# * 'total_rech_amt_8'
+# * 'fb_user_8'
+# * 'date_of_last_rech_8'
+# * 'last_day_rch_amt_8'
+# * 'date_of_last_rech_data_8'
+# * 'total_ic_mou_8'
+# * 'max_rech_amt_8'
+# * 'max_rech_data_8'
+# * 'loc_og_mou_8'
+# 
